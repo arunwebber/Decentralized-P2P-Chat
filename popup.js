@@ -22,7 +22,6 @@ function addMsg(text, who='them'){
   m.textContent = text;
   el('#messages').appendChild(m);
   el('#messages').scrollTop = el('#messages').scrollHeight;
-  updateLineNumbers();
 }
 
 

@@ -57,33 +57,48 @@
       </div>
 
       <div class="rightPanel-content">
-        <div class="rightTabContent" id="pairing" style="display:block;">
-          <div class="pair-row">
-            <button id="startBtn">Start (Create Offer / Start Tracker)</button>
-            <button id="haveOfferBtn">I Have Their Offer</button>
-            <button id="nextBtn">Next</button>
-            <button id="leaveBtn">Leave</button>
+      <div class="rightTabContent" id="pairing" style="display:block;">
+        <div class="pair-row">
+          <button id="startBtn">Start (Create Offer / Start Tracker)</button>
+          <button id="haveOfferBtn">I Have Their Offer</button>
+          <button id="nextBtn">Next</button>
+          <button id="leaveBtn">Leave</button>
+        </div>
+
+        <details class="manualBox" open>
+          <summary>Manual signaling (serverless)</summary>
+          
+          <!-- Add instructions -->
+          <div class="manual-instructions">
+            <h4>How to connect:</h4>
+            <ol>
+              <li><strong>Person A:</strong> Click "Start" to generate an offer</li>
+              <li><strong>Person A:</strong> Copy and share the offer with Person B</li>
+              <li><strong>Person B:</strong> Paste the offer and click "Generate Answer"</li>
+              <li><strong>Person B:</strong> Copy and share the answer back to Person A</li>
+              <li><strong>Person A:</strong> Paste the answer and click "Apply Answer"</li>
+            </ol>
           </div>
 
-          <details class="manualBox" open>
-            <summary>Manual signaling (serverless)</summary>
-            <div class="manual-grid">
-              <div>
-                <label>Your Offer / Answer (share this)</label>
-                <textarea id="localSDP" readonly placeholder="Click ‘Start’ or ‘I Have Their Offer’ to generate…"></textarea>
-                <button id="copyOfferBtn">Copy</button>
-              </div>
-              <div>
-                <label>Paste Remote SDP</label>
-                <textarea id="remoteSDP" placeholder="Paste their Offer or Answer here…"></textarea>
-                <div class="row">
-                  <button id="applyAnswerBtn">Apply Answer</button>
-                  <button id="generateAnswerBtn">Generate Answer</button>
-                </div>
+          <!-- Change from grid to stacked layout -->
+          <div class="manual-stack">
+            <div class="manual-section">
+              <label>Step 1: Your Offer / Answer (share this)</label>
+              <textarea id="localSDP" readonly placeholder="Click 'Start' or 'I Have Their Offer' to generate…"></textarea>
+              <button id="copyOfferBtn">Copy to Clipboard</button>
+            </div>
+            
+            <div class="manual-section">
+              <label>Step 2: Paste Remote SDP</label>
+              <textarea id="remoteSDP" placeholder="Paste their Offer or Answer here…"></textarea>
+              <div class="row">
+                <button id="applyAnswerBtn">Apply Answer (If you started)</button>
+                <button id="generateAnswerBtn">Generate Answer (If they started)</button>
               </div>
             </div>
-          </details>
-        </div>
+          </div>
+        </details>
+      </div>
 
         <div class="rightTabContent" id="settings">
           <div class="kv">
