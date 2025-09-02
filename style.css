@@ -52,9 +52,7 @@ body.dark-mode {
   color: #888;
 }
 
-#fontControls button,
 #downloadBtn,
-#printBtn,
 #settingsButton,
 #startBtn,
 #nextBtn,
@@ -74,26 +72,6 @@ body.dark-mode {
   color: #fff;
 }
 
-#tab-bar {
-  display: flex;
-  align-items: center;
-  padding: 8px 10px;
-  background: #eef1f4;
-  border-bottom: 1px solid var(--border-light);
-}
-
-#tabContainer {
-  flex: 1;
-}
-
-#addTabBtn {
-  background: var(--secondary-color);
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  padding: 6px 12px;
-}
-
 #appLayout {
   display: flex;
   flex: 1;
@@ -106,15 +84,6 @@ body.dark-mode {
   min-height: 0;
 }
 
-#lineNumbers {
-  width: 44px;
-  padding: 12px 8px;
-  font-family: monospace;
-  text-align: right;
-  border-right: 1px solid var(--border-light);
-  background: var(--bg-light);
-  white-space: pre;
-}
 
 #textAreaWrapper {
   flex: 1;

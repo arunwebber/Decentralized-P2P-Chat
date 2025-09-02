@@ -25,11 +25,6 @@ function addMsg(text, who='them'){
   updateLineNumbers();
 }
 
-function updateLineNumbers(){
-  const lines = Math.max(1, Math.ceil(el('#messages').scrollHeight / 20));
-  state.lineCount = lines;
-  el('#lineNumbers').textContent = Array.from({length:lines}, (_,i)=>i+1).join('\n');
-}
 
 function darkModeInit(){
   const toggle = el('#darkModeToggle');
@@ -319,13 +314,6 @@ function saveLog(){
   const a = document.createElement('a'); a.href = url; a.download = `chat-${new Date().toISOString()}.txt`; a.click(); URL.revokeObjectURL(url);
 }
 
-function printLog(){
-  const w = window.open('', '_blank');
-  const msgs = els('.msg').map(n=> (n.classList.contains('me')?'Me: ':'Stranger: ')+n.textContent).join('\n');
-  const esc = (s)=>s.replace(/[&<>]/g, ch=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[ch]));
-  w.document.write(`<pre>${esc(msgs)}</pre>`);
-  w.document.close(); w.focus(); w.print(); w.close();
-}
 
 // ------------------ Tracker Settings ------------------
 function saveTrackers(){
@@ -353,7 +341,6 @@ function bindUI(){
   el('#copyOfferBtn').addEventListener('click', copyLocal);
   el('#sendBtn').addEventListener('click', sendMessage);
   el('#downloadBtn').addEventListener('click', saveLog);
-  el('#printBtn').addEventListener('click', printLog);
   el('#muteBtn').addEventListener('click', muteToggle);
   el('#camBtn').addEventListener('click', camToggle);
   el('#leaveBtn').addEventListener('click', leave);
@@ -382,13 +369,7 @@ function bindUI(){
     });
   });
 
-  // font size shortcuts — persist per session only (simple)
-  let base = 1;
-  el('#increaseFont').addEventListener('click', ()=>{ base = Math.min(1.4, base + 0.05); document.body.style.fontSize = base+'em';});
-  el('#decreaseFont').addEventListener('click', ()=>{ base = Math.max(0.8, base - 0.05); document.body.style.fontSize = base+'em';});
-
   darkModeInit();
-  updateLineNumbers();
 
   // preload trackers into settings UI
   const trackers = localStorage.getItem('trackers') || getDefaultTrackers().join('\n');
