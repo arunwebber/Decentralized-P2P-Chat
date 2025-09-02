@@ -661,6 +661,24 @@ body.dark-mode #chatControls button {
   background: var(--primary-color);
   color: #fff;
 }
+/* Always show chat controls */
+#chatControls {
+  display: flex !important;
+}
 
-/* Remove the buttons from settings that are now in chat controls */
-/* The mute, cam, and screen buttons are now styled by #chatControls button rule */
+/* Disabled state styling */
+#chatControls button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+#chatControls button:disabled:hover {
+  background: inherit;
+  transform: none;
+}
+
+body.dark-mode #chatControls button:disabled:hover {
+  background: var(--bg-dark);
+  color: var(--text-dark);
+  border-color: var(--border-dark);
+}

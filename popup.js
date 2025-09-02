@@ -46,7 +46,7 @@ class ChatState {
         el('#localVideo').srcObject = null;
         
         // Hide chat controls
-        el('#chatControls').style.display = 'none';
+        this.disableChatControls();
         
         // Reset button states
         el('#voiceCallBtn').style.display = 'inline-block';
@@ -57,6 +57,15 @@ class ChatState {
         el('#muteBtn').classList.remove('active');
         el('#camBtn').textContent = '📷';
         el('#camBtn').classList.remove('active');
+    }
+
+    // Add these methods to ChatState class
+    enableChatControls() {
+        els('#chatControls button').forEach(btn => btn.disabled = false);
+    }
+
+    disableChatControls() {
+        els('#chatControls button').forEach(btn => btn.disabled = true);
     }
 }
 
@@ -192,20 +201,20 @@ class WebRTCManager {
         };
     }
 
-    bindDC() {
+    bindDC(signalManager) {  // Add parameter
         if (!this.state.dc) return;
         
         this.state.dc.onopen = () => { 
             this.ui.setStatus('Connected'); 
             this.ui.addMsg('You are now connected to a stranger. Say hi!', 'them');
-            // Show chat controls when connected
-            el('#chatControls').style.display = 'flex';
+            // Enable chat controls when connected
+            this.state.enableChatControls();
         };
         
         this.state.dc.onclose = () => { 
             this.ui.setStatus('Channel closed');
-            // Hide chat controls when disconnected
-            el('#chatControls').style.display = 'none';
+            // Disable chat controls when disconnected
+            this.state.disableChatControls();
         };
         
         this.state.dc.onmessage = (e) => { 
@@ -213,6 +222,12 @@ class WebRTCManager {
             if (typeof e.data === 'string') {
                 try {
                     const data = JSON.parse(e.data);
+                    
+                    // Handle control messages
+                    if (data.type === 'control') {
+                        signalManager.handleControlMessage(data);
+                        return;
+                    }
                     
                     if (data.type === 'file-metadata') {
                         // Receiving file metadata
@@ -493,6 +508,7 @@ class SignalingManager {
         this.tracker = new TrackerManager(this.state, this.ui);
         this.bindGlobalEvents();
         this.loadSettings();
+        this.state.disableChatControls();
     }
 
     // --- Manual Signaling Methods ---
@@ -504,7 +520,7 @@ class SignalingManager {
             },
             (evt) => { 
                 this.state.dc = evt.channel; 
-                this.webrtc.bindDC(); 
+                this.webrtc.bindDC(this); 
             },
             (e) => { 
                 e.streams[0].getTracks().forEach(t => this.state.remoteStream.addTrack(t)); 
@@ -516,7 +532,7 @@ class SignalingManager {
             this.state.localStream = ms; 
         }
         this.state.dc = this.state.pc.createDataChannel('chat');
-        this.webrtc.bindDC();
+        this.webrtc.bindDC(this);
         const offer = await this.state.pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
         await this.state.pc.setLocalDescription(offer);
         this.ui.setStatus('Offer created. Share it to the stranger.');
@@ -537,7 +553,52 @@ class SignalingManager {
         }
     }
 
-    // Add these methods to SignalingManager class:
+    // Add this method to handle incoming control messages
+    handleControlMessage(data) {
+        switch (data.action) {
+            case 'voice-call-start':
+                this.ui.addMsg('Stranger started a voice call', 'them');
+                el('#voiceCallBtn').style.display = 'none';
+                el('#endCallBtn').style.display = 'inline-block';
+                break;
+                
+            case 'video-call-start':
+                this.ui.addMsg('Stranger started a video call', 'them');
+                el('#videoCallBtn').style.display = 'none';
+                el('#endCallBtn').style.display = 'inline-block';
+                break;
+                
+            case 'call-end':
+                this.ui.addMsg('Stranger ended the call', 'them');
+                el('#voiceCallBtn').style.display = 'inline-block';
+                el('#videoCallBtn').style.display = 'inline-block';
+                el('#endCallBtn').style.display = 'none';
+                break;
+                
+            case 'mute-toggle':
+                this.ui.addMsg(data.muted ? 'Stranger muted their microphone' : 'Stranger unmuted their microphone', 'them');
+                break;
+                
+            case 'camera-toggle':
+                this.ui.addMsg(data.cameraOff ? 'Stranger turned off their camera' : 'Stranger turned on their camera', 'them');
+                break;
+                
+            case 'screen-share-toggle':
+                this.ui.addMsg(data.sharing ? 'Stranger started screen sharing' : 'Stranger stopped screen sharing', 'them');
+                break;
+        }
+    }
+
+// Helper method to send control messages
+    sendControlMessage(action, data = {}) {
+        if (this.state.dc && this.state.dc.readyState === 'open') {
+            this.state.dc.send(JSON.stringify({
+                type: 'control',
+                action: action,
+                ...data
+            }));
+        }
+    }
 
     async startVoiceCall() {
         if (!this.state.pc) {
@@ -562,7 +623,8 @@ class SignalingManager {
             el('#voiceCallBtn').style.display = 'none';
             el('#endCallBtn').style.display = 'inline-block';
             this.ui.addMsg('Voice call started', 'me');
-            
+            // Notify peer
+            this.sendControlMessage('voice-call-start');
         } catch (err) {
             console.error('Error starting voice call:', err);
             this.ui.addMsg('Could not start voice call: ' + err.message, 'them');
@@ -596,6 +658,8 @@ class SignalingManager {
             el('#videoCallBtn').style.display = 'none';
             el('#endCallBtn').style.display = 'inline-block';
             this.ui.addMsg('Video call started', 'me');
+            // Notify peer
+            this.sendControlMessage('video-call-start');
             
         } catch (err) {
             console.error('Error starting video call:', err);
@@ -603,29 +667,31 @@ class SignalingManager {
         }
     }
 
-endCall() {
-    if (this.state.localStream) {
-        this.state.localStream.getTracks().forEach(track => {
-            track.stop();
-            const sender = this.state.pc.getSenders().find(s => s.track === track);
-            if (sender && this.state.pc.connectionState === 'connected') {
-                try {
-                    sender.replaceTrack(null);
-                } catch (e) {
-                    console.error('Error replacing track:', e);
+    endCall() {
+        if (this.state.localStream) {
+            this.state.localStream.getTracks().forEach(track => {
+                track.stop();
+                const sender = this.state.pc.getSenders().find(s => s.track === track);
+                if (sender && this.state.pc.connectionState === 'connected') {
+                    try {
+                        sender.replaceTrack(null);
+                    } catch (e) {
+                        console.error('Error replacing track:', e);
+                    }
                 }
-            }
-        });
+            });
+            
+            this.state.localStream = null;
+            el('#localVideo').srcObject = null;
+        }
         
-        this.state.localStream = null;
-        el('#localVideo').srcObject = null;
+        el('#voiceCallBtn').style.display = 'inline-block';
+        el('#videoCallBtn').style.display = 'inline-block';
+        el('#endCallBtn').style.display = 'none';
+        this.ui.addMsg('Call ended', 'me');
+        // Notify peer
+        this.sendControlMessage('call-end');
     }
-    
-    el('#voiceCallBtn').style.display = 'inline-block';
-    el('#videoCallBtn').style.display = 'inline-block';
-    el('#endCallBtn').style.display = 'none';
-    this.ui.addMsg('Call ended', 'me');
-}
     async generateAnswer() {
         const val = el('#remoteSDP').value.trim();
         if (!val) { 
@@ -640,7 +706,7 @@ endCall() {
                 },
                 (evt) => { 
                     this.state.dc = evt.channel; 
-                    this.webrtc.bindDC(); 
+                    this.webrtc.bindDC(this); 
                 },
                 (e) => { 
                     e.streams[0].getTracks().forEach(t => this.state.remoteStream.addTrack(t)); 
@@ -686,6 +752,8 @@ endCall() {
                 this.state.screenStream = null;
                 el('#screenBtn').textContent = '🖥️';
                 this.ui.addMsg('Screen sharing stopped', 'me');
+                // Notify peer
+                this.sendControlMessage('screen-share-toggle', { sharing: false });
                 
             } else {
                 // Start screen sharing
@@ -716,6 +784,8 @@ endCall() {
                 
                 el('#screenBtn').textContent = '⏹️';
                 this.ui.addMsg('Started screen sharing', 'me');
+                // Notify peer
+                this.sendControlMessage('screen-share-toggle', { sharing: true });
             }
         } catch (err) {
             console.error('Error sharing screen:', err);
@@ -765,6 +835,9 @@ endCall() {
             muteBtn.classList.remove('active');
             muteBtn.textContent = '🔇';
         }
+        // Notify peer
+        const isMuted = audioTracks.length > 0 && !audioTracks[0].enabled;
+        this.sendControlMessage('mute-toggle', { muted: isMuted });
     }
     
     camToggle() { 
@@ -781,6 +854,9 @@ endCall() {
             camBtn.classList.remove('active');
             camBtn.textContent = '📷';
         }
+        // Notify peer
+        const isCameraOff = videoTracks.length > 0 && !videoTracks[0].enabled;
+        this.sendControlMessage('camera-toggle', { cameraOff: isCameraOff });
     }
 
     leave() {
