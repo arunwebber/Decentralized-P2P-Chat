@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stranger P2P Chat</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="header">
+    <div class="dark-mode-toggle">
+      <label class="switch">
+        <input type="checkbox" id="darkModeToggle" />
+        <span class="slider round"></span>
+      </label>
+    </div>
+    <div id="titleAndDisclaimer">
+      <h1 id="title">Stranger P2P Chat</h1>
+      <p class="disclaimer">Anonymous • P2P • No central logs</p>
+    </div>
+    <div id="fontControls">
+      <button id="increaseFont" type="button" aria-label="Zoom In">🔍➕</button>
+      <button id="decreaseFont" type="button" aria-label="Zoom Out">🔍➖</button>
+    </div>
+  </div>
+
+  <div id="tab-bar">
+    <div id="tabContainer"></div>
+    <button id="addTabBtn" title="New chat">+</button>
+  </div>
+
+  <div id="appLayout">
+    <div id="container">
+      <div id="lineNumbers"></div>
+      <div id="textAreaWrapper">
+        <div id="chatArea">
+          <div id="statusBar">
+            <span id="status">Idle</span>
+            <div id="signalMode">
+              <label>
+                <input type="radio" name="sigMode" value="manual" checked /> Manual
+              </label>
+              <label>
+                <input type="radio" name="sigMode" value="ws" /> WS (later)
+              </label>
+              <label>
+                <input type="radio" name="sigMode" value="tracker" /> Tracker (later)
+              </label>
+            </div>
+          </div>
+
+          <div id="videos">
+            <video id="remoteVideo" playsinline autoplay muted></video>
+            <video id="localVideo" playsinline autoplay muted></video>
+          </div>
+
+          <div id="messages" aria-live="polite"></div>
+
+          <div id="composer">
+            <input id="msgInput" type="text" placeholder="Type a message..." />
+            <button id="sendBtn">Send</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="rightPanel">
+      <div class="rightPanel-tabs">
+        <button class="rightTab active" data-tab="pairing">Pairing</button>
+        <button class="rightTab" data-tab="settings">Settings</button>
+        <button class="rightTab" data-tab="about">About</button>
+      </div>
+
+      <div class="rightPanel-content">
+        <div class="rightTabContent" id="pairing" style="display:block;">
+          <div class="pair-row">
+            <button id="startBtn">Start (Create Offer)</button>
+            <button id="haveOfferBtn">I Have Their Offer</button>
+            <button id="nextBtn">Next</button>
+            <button id="leaveBtn">Leave</button>
+          </div>
+
+          <details class="manualBox" open>
+            <summary>Manual signaling (serverless)</summary>
+            <div class="manual-grid">
+              <div>
+                <label>Your Offer / Answer (share this)</label>
+                <textarea id="localSDP" readonly placeholder="Click ‘Start’ or ‘I Have Their Offer’ to generate…"></textarea>
+                <button id="copyOfferBtn">Copy</button>
+              </div>
+              <div>
+                <label>Paste Remote SDP</label>
+                <textarea id="remoteSDP" placeholder="Paste their Offer or Answer here…"></textarea>
+                <div class="row">
+                  <button id="applyAnswerBtn">Apply Answer</button>
+                  <button id="generateAnswerBtn">Generate Answer</button>
+                </div>
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <div class="rightTabContent" id="settings">
+          <div class="kv">
+            <label><input type="checkbox" id="audioToggle" checked /> Audio</label>
+            <label><input type="checkbox" id="videoToggle" /> Video</label>
+          </div>
+          <div class="kv">
+            <label>STUN</label>
+            <input id="stunInput" value="stun:stun.stunprotocol.org:3478" />
+          </div>
+          <div class="kv">
+            <button id="muteBtn">Mute</button>
+            <button id="camBtn">Cam On/Off</button>
+          </div>
+        </div>
+
+        <div class="rightTabContent" id="about">
+          <p>WebRTC P2P chat with manual or pluggable signaling. No central message storage. Use ‘Next’ to leave & start a new session.</p>
+          <p>Future: Tracker/WebSocket rendezvous for random matching without running your own server.</p>
+        </div>
+      </div>
+
+      <div id="buttonWrapper">
+        <button id="aiWriteButton" style="display:none;">(unused)</button>
+        <button id="settingsButton">⚙️</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="footer">
+    <a target="_blank" href="https://hashpallabs.com/">HashPalLabs</a>
+    <button id="downloadBtn">Save Log</button>
+    <button id="printBtn">Print</button>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
