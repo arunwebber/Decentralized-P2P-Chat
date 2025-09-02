@@ -61,28 +61,6 @@ body.dark-mode .disclaimer {
   color: #aaa;
 }
 
-#downloadBtn,
-#settingsButton,
-#startBtn,
-#nextBtn,
-#leaveBtn,
-#sendBtn,
-#copyOfferBtn,
-#applyAnswerBtn,
-#generateAnswerBtn,
-#muteBtn,
-#camBtn,
-#haveOfferBtn,
-#saveTrackersBtn,
-#restoreDefaultTrackersBtn {
-  cursor: pointer;
-  padding: 6px 12px;
-  border-radius: 6px;
-  border: 1px solid var(--primary-color);
-  background: var(--primary-color);
-  color: #fff;
-}
-
 #appLayout {
   display: flex;
   flex: 1;
@@ -490,4 +468,111 @@ body.dark-mode details.manualBox {
 /* Update row for button wrapping */
 .row {
   flex-wrap: wrap;
+}
+
+/* File sharing and screen sharing buttons */
+#fileBtn,
+#screenBtn {
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--primary-color);
+  background: var(--primary-color);
+  color: #fff;
+}
+
+/* File progress container */
+#fileProgress {
+  margin-top: 8px;
+  padding: 10px;
+  background: #f0f7ff;
+  border-radius: 6px;
+  border: 1px solid #d0e0ff;
+}
+
+body.dark-mode #fileProgress {
+  background: var(--element-bg-dark);
+  border-color: var(--border-dark);
+}
+
+.file-info {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+#progressBar {
+  width: 100%;
+  height: 20px;
+  border-radius: 10px;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+#progressBar::-webkit-progress-bar {
+  background-color: #f3f3f3;
+  border-radius: 10px;
+}
+
+#progressBar::-webkit-progress-value {
+  background-color: var(--primary-color);
+  border-radius: 10px;
+}
+
+body.dark-mode #progressBar::-webkit-progress-bar {
+  background-color: var(--bg-dark);
+}
+
+/* File link styling for received files */
+.file-link {
+  color: var(--primary-color);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: #f0f7ff;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.file-link:hover {
+  background: #d0e0ff;
+  text-decoration: underline;
+}
+
+body.dark-mode .file-link {
+  background: #1a3a52;
+  color: #4a9eff;
+}
+
+body.dark-mode .file-link:hover {
+  background: #2a4a62;
+}
+
+/* Also add these buttons to your existing button list */
+/* Update your existing button selector to include the new buttons */
+#downloadBtn,
+#settingsButton,
+#startBtn,
+#nextBtn,
+#leaveBtn,
+#sendBtn,
+#copyOfferBtn,
+#applyAnswerBtn,
+#generateAnswerBtn,
+#muteBtn,
+#camBtn,
+#haveOfferBtn,
+#saveTrackersBtn,
+#restoreDefaultTrackersBtn,
+#fileBtn,        /* Add this */
+#screenBtn {     /* Add this */
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--primary-color);
+  background: var(--primary-color);
+  color: #fff;
 }

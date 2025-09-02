@@ -44,6 +44,17 @@
           <div id="composer">
             <input id="msgInput" type="text" placeholder="Type a message..." />
             <button id="sendBtn">Send</button>
+            <input type="file" id="fileInput" style="display: none;" />
+            <button id="fileBtn" title="Send File">📎</button>
+          </div>
+
+          <!-- File transfer progress -->
+          <div id="fileProgress" style="display: none;">
+            <div class="file-info">
+              <span id="fileName"></span>
+              <span id="fileStatus"></span>
+            </div>
+            <progress id="progressBar" max="100" value="0"></progress>
           </div>
         </div>
       </div>
@@ -124,17 +135,15 @@
           <div class="kv" style="margin-top:12px;">
             <button id="muteBtn">Mute</button>
             <button id="camBtn">Cam On/Off</button>
+            <button id="screenBtn">Share Screen</button>
           </div>
         </div>
 
         <div class="rightTabContent" id="about">
-          <p>WebRTC P2P chat with manual or tracker signaling. No central message storage. Use ‘Next’ to leave & start a new session.</p>
+          <p>WebRTC P2P chat with manual or tracker signaling. No central message storage. Use 'Next' to leave & start a new session.</p>
+          <p>Features: Text chat, audio/video calls, screen sharing, and file transfer.</p>
           <p>To enable tracker auto-match, drop the browser builds of simple-peer and bittorrent-tracker into <code>lib/</code> (see README).</p>
         </div>
-      </div>
-
-      <div id="buttonWrapper">
-        <button id="settingsButton">⚙️</button>
       </div>
     </div>
   </div>
