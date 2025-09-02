@@ -44,6 +44,19 @@ class ChatState {
         this.trackerPeer = null;
         el('#remoteVideo').srcObject = null;
         el('#localVideo').srcObject = null;
+        
+        // Hide chat controls
+        el('#chatControls').style.display = 'none';
+        
+        // Reset button states
+        el('#voiceCallBtn').style.display = 'inline-block';
+        el('#videoCallBtn').style.display = 'inline-block';
+        el('#endCallBtn').style.display = 'none';
+        el('#screenBtn').textContent = '🖥️';
+        el('#muteBtn').textContent = '🔇';
+        el('#muteBtn').classList.remove('active');
+        el('#camBtn').textContent = '📷';
+        el('#camBtn').classList.remove('active');
     }
 }
 
@@ -184,11 +197,15 @@ class WebRTCManager {
         
         this.state.dc.onopen = () => { 
             this.ui.setStatus('Connected'); 
-            this.ui.addMsg('You are now connected to a stranger. Say hi!', 'them'); 
+            this.ui.addMsg('You are now connected to a stranger. Say hi!', 'them');
+            // Show chat controls when connected
+            el('#chatControls').style.display = 'flex';
         };
         
         this.state.dc.onclose = () => { 
-            this.ui.setStatus('Channel closed'); 
+            this.ui.setStatus('Channel closed');
+            // Hide chat controls when disconnected
+            el('#chatControls').style.display = 'none';
         };
         
         this.state.dc.onmessage = (e) => { 
@@ -250,6 +267,7 @@ class FileTransferManager {
             fileInput.addEventListener('change', (e) => {
                 const file = e.target.files[0];
                 if (file) this.sendFile(file);
+                e.target.value = ''; // Reset input
             });
         }
     }
@@ -265,7 +283,7 @@ class FileTransferManager {
             type: 'file-metadata',
             name: file.name,
             size: file.size,
-            mimeType: file.type
+            mimeType: file.type || 'application/octet-stream'
         };
         
         // Send metadata first
@@ -274,33 +292,58 @@ class FileTransferManager {
         // Show progress
         this.ui.showFileProgress(file.name, true);
         
+        // Add delay to ensure metadata is received first
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
         // Read and send file in chunks
-        const reader = new FileReader();
         let offset = 0;
         
-        const readSlice = () => {
-            const slice = file.slice(offset, offset + chunkSize);
-            reader.readAsArrayBuffer(slice);
-        };
-        
-        reader.onload = (e) => {
-            this.state.dc.send(e.target.result);
-            offset += e.target.result.byteLength;
-            
-            const progress = Math.round((offset / file.size) * 100);
-            this.ui.updateFileProgress(progress);
-            
-            if (offset < file.size) {
-                readSlice();
-            } else {
+        const sendNextChunk = async () => {
+            if (offset >= file.size) {
                 // Send completion signal
                 this.state.dc.send(JSON.stringify({ type: 'file-complete' }));
                 this.ui.addMsg(`Sent file: ${file.name}`, 'me');
                 this.ui.hideFileProgress();
+                return;
             }
+            
+            // Check if data channel buffer is not full
+            if (this.state.dc.bufferedAmount > 65536) { // 64KB buffer threshold
+                // Wait for buffer to drain
+                setTimeout(() => sendNextChunk(), 50);
+                return;
+            }
+            
+            const slice = file.slice(offset, Math.min(offset + chunkSize, file.size));
+            const reader = new FileReader();
+            
+            reader.onload = (e) => {
+                try {
+                    this.state.dc.send(e.target.result);
+                    offset += e.target.result.byteLength;
+                    
+                    const progress = Math.round((offset / file.size) * 100);
+                    this.ui.updateFileProgress(progress);
+                    
+                    // Send next chunk
+                    setTimeout(() => sendNextChunk(), 10);
+                } catch (err) {
+                    console.error('Error sending chunk:', err);
+                    this.ui.addMsg('File transfer failed', 'them');
+                    this.ui.hideFileProgress();
+                }
+            };
+            
+            reader.onerror = () => {
+                this.ui.addMsg('Error reading file', 'them');
+                this.ui.hideFileProgress();
+            };
+            
+            reader.readAsArrayBuffer(slice);
         };
         
-        readSlice();
+        // Start sending
+        sendNextChunk();
     }
 }
 
@@ -494,6 +537,95 @@ class SignalingManager {
         }
     }
 
+    // Add these methods to SignalingManager class:
+
+    async startVoiceCall() {
+        if (!this.state.pc) {
+            this.ui.addMsg('Not connected. Cannot start call.', 'them');
+            return;
+        }
+        
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            
+            // Replace or add audio track
+            const audioTrack = stream.getAudioTracks()[0];
+            const sender = this.state.pc.getSenders().find(s => s.track && s.track.kind === 'audio');
+            
+            if (sender) {
+                sender.replaceTrack(audioTrack);
+            } else {
+                this.state.pc.addTrack(audioTrack, stream);
+            }
+            
+            this.state.localStream = stream;
+            el('#voiceCallBtn').style.display = 'none';
+            el('#endCallBtn').style.display = 'inline-block';
+            this.ui.addMsg('Voice call started', 'me');
+            
+        } catch (err) {
+            console.error('Error starting voice call:', err);
+            this.ui.addMsg('Could not start voice call: ' + err.message, 'them');
+        }
+    }
+
+    async startVideoCall() {
+        if (!this.state.pc) {
+            this.ui.addMsg('Not connected. Cannot start call.', 'them');
+            return;
+        }
+        
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+            
+            // Update local video
+            el('#localVideo').srcObject = stream;
+            
+            // Add or replace tracks
+            stream.getTracks().forEach(track => {
+                const sender = this.state.pc.getSenders().find(s => s.track && s.track.kind === track.kind);
+                
+                if (sender) {
+                    sender.replaceTrack(track);
+                } else {
+                    this.state.pc.addTrack(track, stream);
+                }
+            });
+            
+            this.state.localStream = stream;
+            el('#videoCallBtn').style.display = 'none';
+            el('#endCallBtn').style.display = 'inline-block';
+            this.ui.addMsg('Video call started', 'me');
+            
+        } catch (err) {
+            console.error('Error starting video call:', err);
+            this.ui.addMsg('Could not start video call: ' + err.message, 'them');
+        }
+    }
+
+endCall() {
+    if (this.state.localStream) {
+        this.state.localStream.getTracks().forEach(track => {
+            track.stop();
+            const sender = this.state.pc.getSenders().find(s => s.track === track);
+            if (sender && this.state.pc.connectionState === 'connected') {
+                try {
+                    sender.replaceTrack(null);
+                } catch (e) {
+                    console.error('Error replacing track:', e);
+                }
+            }
+        });
+        
+        this.state.localStream = null;
+        el('#localVideo').srcObject = null;
+    }
+    
+    el('#voiceCallBtn').style.display = 'inline-block';
+    el('#videoCallBtn').style.display = 'inline-block';
+    el('#endCallBtn').style.display = 'none';
+    this.ui.addMsg('Call ended', 'me');
+}
     async generateAnswer() {
         const val = el('#remoteSDP').value.trim();
         if (!val) { 
@@ -552,7 +684,7 @@ class SignalingManager {
                 }
                 
                 this.state.screenStream = null;
-                el('#screenBtn').textContent = 'Share Screen';
+                el('#screenBtn').textContent = '🖥️';
                 this.ui.addMsg('Screen sharing stopped', 'me');
                 
             } else {
@@ -582,7 +714,7 @@ class SignalingManager {
                     this.toggleScreenShare();
                 };
                 
-                el('#screenBtn').textContent = 'Stop Sharing';
+                el('#screenBtn').textContent = '⏹️';
                 this.ui.addMsg('Started screen sharing', 'me');
             }
         } catch (err) {
@@ -621,12 +753,34 @@ class SignalingManager {
 
     muteToggle() { 
         if (!this.state.localStream) return; 
-        this.state.localStream.getAudioTracks().forEach(t => t.enabled = !t.enabled); 
+        const audioTracks = this.state.localStream.getAudioTracks();
+        audioTracks.forEach(t => t.enabled = !t.enabled);
+        
+        // Toggle button appearance
+        const muteBtn = el('#muteBtn');
+        if (audioTracks.length > 0 && !audioTracks[0].enabled) {
+            muteBtn.classList.add('active');
+            muteBtn.textContent = '🔊';
+        } else {
+            muteBtn.classList.remove('active');
+            muteBtn.textContent = '🔇';
+        }
     }
     
     camToggle() { 
         if (!this.state.localStream) return; 
-        this.state.localStream.getVideoTracks().forEach(t => t.enabled = !t.enabled); 
+        const videoTracks = this.state.localStream.getVideoTracks();
+        videoTracks.forEach(t => t.enabled = !t.enabled);
+        
+        // Toggle button appearance
+        const camBtn = el('#camBtn');
+        if (videoTracks.length > 0 && !videoTracks[0].enabled) {
+            camBtn.classList.add('active');
+            camBtn.textContent = '📹';
+        } else {
+            camBtn.classList.remove('active');
+            camBtn.textContent = '📷';
+        }
     }
 
     leave() {
@@ -705,6 +859,12 @@ class SignalingManager {
         
         // Utility
         el('#downloadBtn').addEventListener('click', () => this.saveLog());
+        // In bindGlobalEvents method, add these new event listeners:
+
+        // Call buttons
+        el('#voiceCallBtn').addEventListener('click', () => this.startVoiceCall());
+        el('#videoCallBtn').addEventListener('click', () => this.startVideoCall());
+        el('#endCallBtn').addEventListener('click', () => this.endCall());
     }
 }
 

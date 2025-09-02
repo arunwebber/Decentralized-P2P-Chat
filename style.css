@@ -470,17 +470,6 @@ body.dark-mode details.manualBox {
   flex-wrap: wrap;
 }
 
-/* File sharing and screen sharing buttons */
-#fileBtn,
-#screenBtn {
-  cursor: pointer;
-  padding: 6px 12px;
-  border-radius: 6px;
-  border: 1px solid var(--primary-color);
-  background: var(--primary-color);
-  color: #fff;
-}
-
 /* File progress container */
 #fileProgress {
   margin-top: 8px;
@@ -551,8 +540,107 @@ body.dark-mode .file-link:hover {
   background: #2a4a62;
 }
 
-/* Also add these buttons to your existing button list */
-/* Update your existing button selector to include the new buttons */
+/* Add these new styles to your existing CSS */
+
+/* Chat controls bar */
+#chatControls {
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  background: #f5f5f5;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+body.dark-mode #chatControls {
+  background: var(--element-bg-dark);
+}
+
+#chatControls button {
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-light);
+  background: #fff;
+  color: var(--text-light);
+  font-size: 18px;
+  transition: all 0.2s;
+  min-width: 44px;
+}
+
+body.dark-mode #chatControls button {
+  background: var(--bg-dark);
+  border-color: var(--border-dark);
+  color: var(--text-dark);
+}
+
+#chatControls button:hover {
+  background: var(--primary-color);
+  color: #fff;
+  border-color: var(--primary-color);
+}
+
+#chatControls button:active {
+  transform: scale(0.95);
+}
+
+/* Special styling for active states */
+#chatControls button.active {
+  background: var(--primary-color);
+  color: #fff;
+  border-color: var(--primary-color);
+}
+
+/* Voice and video call buttons */
+#voiceCallBtn,
+#videoCallBtn {
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-light);
+  background: #fff;
+  color: var(--text-light);
+  font-size: 18px;
+  transition: all 0.2s;
+  min-width: 44px;
+}
+
+/* End call button - red styling */
+#endCallBtn {
+  background: #dc3545 !important;
+  border-color: #dc3545 !important;
+  color: #fff !important;
+}
+
+#endCallBtn:hover {
+  background: #c82333 !important;
+  border-color: #c82333 !important;
+}
+
+
+#composer #fileBtn {
+  font-size: 18px;
+  padding: 8px 12px;
+  min-width: 44px;
+}
+
+/* Responsive design for mobile */
+@media (max-width: 480px) {
+  #chatControls {
+    gap: 4px;
+    padding: 6px;
+  }
+  
+  #chatControls button {
+    padding: 6px 8px;
+    font-size: 16px;
+    min-width: 36px;
+  }
+}
+
+/* Clean up your button styling - REPLACE the bottom button list with this consolidated version */
 #downloadBtn,
 #settingsButton,
 #startBtn,
@@ -562,13 +650,10 @@ body.dark-mode .file-link:hover {
 #copyOfferBtn,
 #applyAnswerBtn,
 #generateAnswerBtn,
-#muteBtn,
-#camBtn,
 #haveOfferBtn,
 #saveTrackersBtn,
 #restoreDefaultTrackersBtn,
-#fileBtn,        /* Add this */
-#screenBtn {     /* Add this */
+#fileBtn {
   cursor: pointer;
   padding: 6px 12px;
   border-radius: 6px;
@@ -576,3 +661,6 @@ body.dark-mode .file-link:hover {
   background: var(--primary-color);
   color: #fff;
 }
+
+/* Remove the buttons from settings that are now in chat controls */
+/* The mute, cam, and screen buttons are now styled by #chatControls button rule */
