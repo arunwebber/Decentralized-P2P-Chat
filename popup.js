@@ -1,4 +1,6 @@
-// WebRTC P2P with manual signaling. Omegle-style controls.
+// Based largely on your original working code (manual signaling) with a safe, optional Tracker mode.
+// Original base restored from your uploaded popup.js. :contentReference[oaicite:5]{index=5}
+
 const els = (sel, root=document)=>Array.from(root.querySelectorAll(sel));
 const el = (sel, root=document)=>root.querySelector(sel);
 
@@ -8,7 +10,9 @@ const state = {
   localStream: null,
   remoteStream: null,
   connected: false,
-  lineCount: 1
+  lineCount: 1,
+  trackerClient: null,   // optional tracker client
+  trackerPeer: null      // peer object from tracker (if any)
 };
 
 function setStatus(txt){ el('#status').textContent = txt; }
@@ -22,7 +26,6 @@ function addMsg(text, who='them'){
 }
 
 function updateLineNumbers(){
-  // Simple approximation of line numbers beside the chat log
   const lines = Math.max(1, Math.ceil(el('#messages').scrollHeight / 20));
   state.lineCount = lines;
   el('#lineNumbers').textContent = Array.from({length:lines}, (_,i)=>i+1).join('\n');
@@ -39,8 +42,8 @@ function darkModeInit(){
 }
 
 async function getMediaIfEnabled(){
-  const wantAudio = el('#audioToggle').checked;
-  const wantVideo = el('#videoToggle').checked;
+  const wantAudio = el('#audioToggle') ? el('#audioToggle').checked : true;
+  const wantVideo = el('#videoToggle') ? el('#videoToggle').checked : false;
   if (!wantAudio && !wantVideo) return null;
   try{
     const stream = await navigator.mediaDevices.getUserMedia({ audio: wantAudio, video: wantVideo });
@@ -49,6 +52,7 @@ async function getMediaIfEnabled(){
   }catch(e){ console.error(e); addMsg('Could not access mic/cam: '+e.message,'them'); return null; }
 }
 
+// ------------------ Manual Signaling (original code) ------------------
 function createPeer(){
   const stun = el('#stunInput').value || 'stun:stun.stunprotocol.org:3478';
   const pc = new RTCPeerConnection({ iceServers:[{ urls: stun }] });
@@ -83,6 +87,7 @@ function bindDC(){
 }
 
 async function start(){
+  // Manual: create offer
   if (state.pc) cleanup();
   createPeer();
 
@@ -127,29 +132,170 @@ async function generateAnswer(){
   }catch(e){ alert('Invalid offer: '+e.message); }
 }
 
+function copyLocal(){
+  const ta = el('#localSDP');
+  if (!ta) return;
+  ta.select(); ta.setSelectionRange(0, 99999);
+  document.execCommand('copy');
+}
+
+// ------------------ Tracker Mode (optional, safe) ------------------
+// NOTE: tracker mode will only work if you include the browser UMD builds inside lib/
+// - lib/simplepeer.min.js  (exposes SimplePeer global)
+// - lib/bittorrent-tracker.min.js (exposes Client global)
+// If they are not present, tracker mode will inform the user and not crash.
+
+function getDefaultTrackers(){
+  return [
+    'wss://tracker.openwebtorrent.com',
+    'wss://tracker.btorrent.xyz',
+    'wss://tracker.fastcast.nz',
+    'wss://tracker.webtorrent.dev'
+  ];
+}
+
+function getTrackersList(){
+  const saved = localStorage.getItem('trackers');
+  if (saved && saved.trim()) return saved.trim().split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+  return getDefaultTrackers();
+}
+
+function startTrackerMode(){
+  // detection of browser globals (be tolerant to different UMD naming)
+  const TrackerClient = window.Client || window.bittorrentTrackerClient || window.BittorrentTrackerClient || window.bittorrentTracker || null;
+  const SimplePeerGlobal = window.SimplePeer || window.SimplePeerDefault || window.SimplePeerLib || null;
+
+  if (!TrackerClient || !SimplePeerGlobal){
+    addMsg('Tracker libraries not found. To enable Tracker mode, add browser builds of simple-peer and bittorrent-tracker to lib/.','them');
+    setStatus('Tracker unavailable');
+    return;
+  }
+
+  // safe destroy any existing client/pc
+  if (state.trackerClient && state.trackerClient.destroy) {
+    try{ state.trackerClient.destroy(); }catch(_){}
+    state.trackerClient = null;
+  }
+  if (state.trackerPeer && state.trackerPeer.destroy) {
+    try{ state.trackerPeer.destroy(); }catch(_){}
+    state.trackerPeer = null;
+  }
+
+  // prepare announce list
+  const announce = getTrackersList();
+  const peerId = 'p-' + Math.random().toString(36).substr(2, 9);
+  const infoHash = 'strangerchatroom00000001'; // simple swarm id (not a real torrent hash but accepted by some tracker libs)
+
+  try{
+    // instantiate tracker client using the detected global Client
+    const client = new TrackerClient({
+      infoHash,
+      peerId,
+      announce
+    });
+
+    state.trackerClient = client;
+    setStatus('Searching for peers (tracker)...');
+    addMsg('Searching for a stranger (tracker mode)...', 'them');
+
+    client.on('error', (err) => {
+      console.warn('tracker error', err);
+      addMsg('Tracker error: '+(err && err.message ? err.message : err), 'them');
+      setStatus('Tracker error');
+    });
+
+    client.on('warning', (err) => {
+      console.warn('tracker warning', err);
+    });
+
+    // when tracker finds a remote peer this event fires. Many tracker libs emit 'peer'.
+    client.on('peer', (peer) => {
+      // 'peer' is usually an object that speaks the simple-peer-like API (signal/send/data/connect)
+      console.log('Tracker found peer', peer);
+      if (state.trackerPeer) {
+        // already connected to another peer; ignore extras
+        return;
+      }
+      bindTrackerPeer(peer);
+    });
+
+    client.start(); // some clients require start(); if client doesn't have start, it's OK
+  }catch(e){
+    console.error('failed to start tracker client', e);
+    addMsg('Failed to start tracker client: '+e.message, 'them');
+    setStatus('Tracker init failed');
+  }
+}
+
+function bindTrackerPeer(peer){
+  // store
+  state.trackerPeer = peer;
+
+  // many tracker 'peer' objects have .on / .signal / .send semantics (similar to simple-peer)
+  if (peer.on) {
+    // forwarding 'signal' emitted by the real peer to tracker's signal method
+    try{
+      peer.on('signal', data=>{
+        try{
+          if (state.trackerClient && state.trackerClient.signal) state.trackerClient.signal(data);
+        }catch(_){}
+      });
+    }catch(_){}
+    try{ peer.on('connect', ()=>{ setStatus('Connected (tracker)'); addMsg('Connected to stranger (tracker).','them'); state.dc = peer; }); }catch(_){}
+    try{ peer.on('data', (d)=>{ addMsg((d && d.toString)?d.toString():String(d), 'them'); }); }catch(_){}
+  } else {
+    // unknown shape — try commonly available helpers
+    if (peer.onmessage) {
+      peer.onmessage = (e)=> addMsg(e.data,'them');
+      setStatus('Connected (tracker)');
+      state.dc = peer;
+    } else {
+      addMsg('Connected to peer (tracker) — but peer API shape is unfamiliar; check tracker build compatibility.', 'them');
+    }
+  }
+}
+
+// ------------------ Send / UI / Controls (shared) ------------------
 function sendMessage(){
   const i = el('#msgInput');
   const text = i.value.trim();
-  if (!text || !state.dc || state.dc.readyState !== 'open') return;
-  state.dc.send(text);
-  addMsg(text,'me');
-  i.value = '';
-}
+  if (!text) return;
 
-function copyLocal(){
-  const ta = el('#localSDP');
-  ta.select(); ta.setSelectionRange(0, 99999);
-  document.execCommand('copy');
+  // prefer datachannel (manual) then tracker peer
+  try{
+    if (state.dc && (state.dc.readyState === 'open' || state.dc.readyState === 'open')) {
+      // RTCDataChannel case
+      state.dc.send(text);
+      addMsg(text,'me');
+      i.value = '';
+      return;
+    }
+  }catch(e){ /* continue to try tracker peer */ }
+
+  // tracker peer 'send' method (some libs expose send)
+  try{
+    if (state.trackerPeer && state.trackerPeer.send) {
+      state.trackerPeer.send(text);
+      addMsg(text,'me');
+      i.value = '';
+      return;
+    }
+  }catch(e){ console.error(e); }
+
+  addMsg('Not connected to a stranger. Start a session first.','them');
 }
 
 function muteToggle(){ if (!state.localStream) return; state.localStream.getAudioTracks().forEach(t=>t.enabled = !t.enabled); }
 function camToggle(){ if (!state.localStream) return; state.localStream.getVideoTracks().forEach(t=>t.enabled = !t.enabled); }
 
 function cleanup(){
-  try{ if (state.dc) state.dc.close(); }catch(_){};
+  try{ if (state.dc) state.dc.close && state.dc.close(); }catch(_){};
   try{ if (state.pc) state.pc.close(); }catch(_){};
+  try{ if (state.trackerPeer) state.trackerPeer.destroy && state.trackerPeer.destroy(); }catch(_){};
+  try{ if (state.trackerClient) state.trackerClient.destroy && state.trackerClient.destroy(); }catch(_){};
   if (state.localStream){ state.localStream.getTracks().forEach(t=>t.stop()); }
   state.pc = null; state.dc = null; state.localStream = null; state.remoteStream = null; state.connected = false;
+  state.trackerClient = null; state.trackerPeer = null;
   el('#remoteVideo').srcObject = null; el('#localVideo').srcObject = null;
 }
 
@@ -158,7 +304,13 @@ function leave(){
   setStatus('Left chat.');
 }
 
-function next(){ leave(); start(); }
+function next(){ 
+  leave();
+  // if tracker mode is selected, start tracker; otherwise start manual (new offer)
+  const mode = (el('input[name="sigMode"]:checked') || {}).value || 'manual';
+  if (mode === 'tracker') startTrackerMode();
+  else start();
+}
 
 function saveLog(){
   const text = els('.msg').map(n=> (n.classList.contains('me')?'Me: ':'Stranger: ')+n.textContent).join('\n');
@@ -175,8 +327,27 @@ function printLog(){
   w.document.close(); w.focus(); w.print(); w.close();
 }
 
+// ------------------ Tracker Settings ------------------
+function saveTrackers(){
+  const list = (el('#trackerList') && el('#trackerList').value) ? el('#trackerList').value.trim() : '';
+  localStorage.setItem('trackers', list);
+  addMsg('Tracker list saved.', 'them');
+  setStatus('Tracker list saved');
+}
+
+function restoreDefaultTrackers(){
+  el('#trackerList').value = getDefaultTrackers().join('\n');
+  saveTrackers();
+}
+
+// ------------------ UI binding ------------------
 function bindUI(){
-  el('#startBtn').addEventListener('click', start);
+  el('#startBtn').addEventListener('click', ()=>{
+    const mode = (el('input[name="sigMode"]:checked') || {}).value || 'manual';
+    if (mode === 'manual') start();
+    else startTrackerMode();
+  });
+
   el('#applyAnswerBtn').addEventListener('click', applyAnswer);
   el('#generateAnswerBtn').addEventListener('click', generateAnswer);
   el('#copyOfferBtn').addEventListener('click', copyLocal);
@@ -189,6 +360,9 @@ function bindUI(){
   el('#nextBtn').addEventListener('click', next);
   el('#haveOfferBtn').addEventListener('click', ()=>{ el('#remoteSDP').focus(); });
 
+  el('#saveTrackersBtn').addEventListener('click', saveTrackers);
+  el('#restoreDefaultTrackersBtn').addEventListener('click', restoreDefaultTrackers);
+
   // right panel tabs
   els('.rightTab').forEach(btn=>{
     btn.addEventListener('click', ()=>{
@@ -199,6 +373,15 @@ function bindUI(){
     });
   });
 
+  // show/hide manual UI depending on mode
+  els('input[name="sigMode"]').forEach(r=>{
+    r.addEventListener('change', ()=>{
+      const mode = (el('input[name="sigMode"]:checked') || {}).value || 'manual';
+      const manualBox = el('.manualBox') ? el('.manualBox').closest('details') || null : null;
+      if (manualBox) manualBox.style.display = (mode === 'manual') ? 'block' : 'none';
+    });
+  });
+
   // font size shortcuts — persist per session only (simple)
   let base = 1;
   el('#increaseFont').addEventListener('click', ()=>{ base = Math.min(1.4, base + 0.05); document.body.style.fontSize = base+'em';});
@@ -206,6 +389,10 @@ function bindUI(){
 
   darkModeInit();
   updateLineNumbers();
+
+  // preload trackers into settings UI
+  const trackers = localStorage.getItem('trackers') || getDefaultTrackers().join('\n');
+  if (el('#trackerList')) el('#trackerList').value = trackers.trim();
 }
 
 document.addEventListener('DOMContentLoaded', bindUI);

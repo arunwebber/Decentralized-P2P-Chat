@@ -36,16 +36,11 @@
         <div id="chatArea">
           <div id="statusBar">
             <span id="status">Idle</span>
+
+            <!-- simplified signaling selector (manual or tracker) -->
             <div id="signalMode">
-              <label>
-                <input type="radio" name="sigMode" value="manual" checked /> Manual
-              </label>
-              <label>
-                <input type="radio" name="sigMode" value="ws" /> WS (later)
-              </label>
-              <label>
-                <input type="radio" name="sigMode" value="tracker" /> Tracker (later)
-              </label>
+              <label><input type="radio" name="sigMode" value="manual" checked /> Manual</label>
+              <label><input type="radio" name="sigMode" value="tracker" /> Tracker</label>
             </div>
           </div>
 
@@ -74,7 +69,7 @@
       <div class="rightPanel-content">
         <div class="rightTabContent" id="pairing" style="display:block;">
           <div class="pair-row">
-            <button id="startBtn">Start (Create Offer)</button>
+            <button id="startBtn">Start (Create Offer / Start Tracker)</button>
             <button id="haveOfferBtn">I Have Their Offer</button>
             <button id="nextBtn">Next</button>
             <button id="leaveBtn">Leave</button>
@@ -109,20 +104,31 @@
             <label>STUN</label>
             <input id="stunInput" value="stun:stun.stunprotocol.org:3478" />
           </div>
-          <div class="kv">
+
+          <!-- TRACKER settings -->
+          <div style="margin-top:12px;">
+            <label for="trackerList"><strong>Tracker Servers (one per line)</strong></label>
+            <textarea id="trackerList" placeholder="wss://tracker.openwebtorrent.com\nwss://tracker.btorrent.xyz" rows="5"></textarea>
+            <div class="row" style="margin-top:8px;">
+              <button id="saveTrackersBtn">Save Trackers</button>
+              <button id="restoreDefaultTrackersBtn">Restore Defaults</button>
+            </div>
+            <p style="font-size:12px;color:#666;margin-top:6px;">Tracker mode requires adding `lib/simplepeer.min.js` and `lib/bittorrent-tracker.min.js` to enable auto-matching.</p>
+          </div>
+
+          <div class="kv" style="margin-top:12px;">
             <button id="muteBtn">Mute</button>
             <button id="camBtn">Cam On/Off</button>
           </div>
         </div>
 
         <div class="rightTabContent" id="about">
-          <p>WebRTC P2P chat with manual or pluggable signaling. No central message storage. Use ‘Next’ to leave & start a new session.</p>
-          <p>Future: Tracker/WebSocket rendezvous for random matching without running your own server.</p>
+          <p>WebRTC P2P chat with manual or tracker signaling. No central message storage. Use ‘Next’ to leave & start a new session.</p>
+          <p>To enable tracker auto-match, drop the browser builds of simple-peer and bittorrent-tracker into <code>lib/</code> (see README).</p>
         </div>
       </div>
 
       <div id="buttonWrapper">
-        <button id="aiWriteButton" style="display:none;">(unused)</button>
         <button id="settingsButton">⚙️</button>
       </div>
     </div>
@@ -133,6 +139,11 @@
     <button id="downloadBtn">Save Log</button>
     <button id="printBtn">Print</button>
   </div>
+
+  <!-- OPTIONAL: put browser UMD builds here (local files inside the extension package) -->
+  <!-- Example: lib/simplepeer.min.js and lib/bittorrent-tracker.min.js -->
+  <script src="lib/simplepeer.min.js"></script>
+  <script src="lib/bittorrent-tracker.min.js"></script>
 
   <script src="popup.js"></script>
 </body>

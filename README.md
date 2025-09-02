@@ -1,4 +1,4 @@
-# Stranger P2P Chat Decentralized 
+# Decentralized  P2P Chat 
 Anonymous, browser-based WebRTC chat extension with **manual signaling** (serverless) and Omegle-style controls.
 
 ## How to Install (Chrome/Edge)
