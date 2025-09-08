@@ -288,7 +288,21 @@ class FileTransferManager {
     }
     
     async sendFile(file) {
-        if (!this.state.dc || this.state.dc.readyState !== 'open') {
+        // Check both regular DC and SimplePeer connections
+        let canSend = false;
+        
+        if (this.state.dc) {
+            // For manual connections with DataChannel
+            if (this.state.dc.readyState === 'open') {
+                canSend = true;
+            }
+            // For pool connections with SimplePeer
+            else if (this.state.poolPeer && this.state.poolPeer.connected) {
+                canSend = true;
+            }
+        }
+        
+        if (!canSend) {
             this.ui.addMsg('Not connected. Cannot send file.', 'them');
             return;
         }
@@ -323,7 +337,15 @@ class FileTransferManager {
             }
             
             // Check if data channel buffer is not full
-            if (this.state.dc.bufferedAmount > 65536) { // 64KB buffer threshold
+            // For SimplePeer, check if connected
+            if (this.state.poolPeer && !this.state.poolPeer.connected) {
+                this.ui.addMsg('Connection lost during file transfer', 'them');
+                this.ui.hideFileProgress();
+                return;
+            }
+            
+            // For regular DC, check bufferedAmount
+            if (this.state.dc.bufferedAmount && this.state.dc.bufferedAmount > 65536) {
                 // Wait for buffer to drain
                 setTimeout(() => sendNextChunk(), 50);
                 return;
@@ -348,7 +370,8 @@ class FileTransferManager {
                     this.ui.hideFileProgress();
                 }
             };
-                        reader.onerror = () => {
+            
+            reader.onerror = () => {
                 this.ui.addMsg('Error reading file', 'them');
                 this.ui.hideFileProgress();
             };
@@ -697,13 +720,31 @@ class SignalingManager {
     }
 
     // Helper method to send control messages
+// Helper method to send control messages
     sendControlMessage(action, data = {}) {
+        let messageSent = false;
+        
+        // Try regular DataChannel first
         if (this.state.dc && this.state.dc.readyState === 'open') {
             this.state.dc.send(JSON.stringify({
                 type: 'control',
                 action: action,
                 ...data
             }));
+            messageSent = true;
+        }
+        // Try pool peer connection
+        else if (this.state.poolPeer && this.state.poolPeer.connected && this.state.dc) {
+            this.state.dc.send(JSON.stringify({
+                type: 'control',
+                action: action,
+                ...data
+            }));
+            messageSent = true;
+        }
+        
+        if (!messageSent) {
+            console.warn('Cannot send control message - not connected');
         }
     }
 
