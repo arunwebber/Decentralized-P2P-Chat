@@ -416,6 +416,30 @@ class PoolManager {
             this.state.poolPeer = null;
         }
         
+        // Set up global handler for pool signals
+        window.poolSignalData = (signal, isInitiator) => {
+            // Show signal in manual exchange area
+            el('#localSDP').value = JSON.stringify(signal);
+            
+            if (isInitiator) {
+                this.ui.setStatus('Pool: Found someone! Copy your offer and share it');
+                this.ui.addMsg('Found a stranger! You are the initiator. Copy your offer above and share it with them.', 'them');
+            } else {
+                this.ui.setStatus('Pool: Someone found you! Copy your answer and share it');
+                this.ui.addMsg('A stranger found you! Wait for their offer, paste it below, then share your answer.', 'them');
+            }
+            
+            // Show manual exchange UI
+            const manualBox = el('.manualBox');
+            if (manualBox) manualBox.style.display = 'block';
+            
+            // Enable the appropriate buttons
+            if (!isInitiator) {
+                // They need to wait for an offer first
+                el('#generateAnswerBtn').style.display = 'inline-block';
+            }
+        };
+        
         // Prepare announce list
         const announce = this.getPoolsList();
         const peerId = 'p-' + Math.random().toString(36).substr(2, 9);
@@ -429,8 +453,8 @@ class PoolManager {
             });
             
             this.state.poolClient = client;
-            this.ui.setStatus('Searching for peers (pool)...');
-            this.ui.addMsg('Searching for a stranger (pool mode)...', 'them');
+            this.ui.setStatus('Looking for strangers in the pool...');
+            this.ui.addMsg('Joining the pool, searching for someone to chat with...', 'them');
             
             client.on('error', (err) => {
                 console.warn('pool error', err);
@@ -443,58 +467,145 @@ class PoolManager {
             });
             
             client.on('peer', (peer) => {
-                console.log('Pool found peer', peer);
+                console.log('Pool matched with peer');
                 if (this.state.poolPeer) {
                     return;
                 }
+                
+                this.state.poolPeer = peer;
                 this.bindPoolPeer(peer);
             });
             
             client.start();
         } catch (e) {
             console.error('failed to start pool client', e);
-            this.ui.addMsg('Failed to start pool client: ' + e.message, 'them');
+            this.ui.addMsg('Failed to start pool: ' + e.message, 'them');
             this.ui.setStatus('Pool init failed');
+        }
+    }
+
+    bindPoolPeer(peer) {
+        this.state.poolPeer = peer;
+        
+        // SimplePeer events
+        peer.on('connect', () => {
+            console.log('Pool peer connected!');
+            this.ui.setStatus('Connected (pool)');
+            this.ui.addMsg('Connected to stranger! You can now chat.', 'them');
+            this.state.dc = peer;
+            this.state.enableChatControls();
+            
+            // Clear the signal data
+            el('#localSDP').value = '';
+            el('#remoteSDP').value = '';
+            
+            // Hide manual box since we're connected
+            const manualBox = el('.manualBox');
+            if (manualBox) manualBox.style.display = 'none';
+        });
+        
+        peer.on('data', (data) => {
+            try {
+                // Handle incoming messages
+                if (typeof data === 'string' || data instanceof String) {
+                    this.ui.addMsg(data, 'them');
+                } else if (data instanceof ArrayBuffer || data instanceof Uint8Array) {
+                    // Convert buffer to string for text messages
+                    const text = new TextDecoder().decode(data);
+                    try {
+                        // Check if it's JSON (control message)
+                        const parsed = JSON.parse(text);
+                        if (parsed.type === 'control') {
+                            // Let signalManager handle it
+                            if (window.signalManager) {
+                                window.signalManager.handleControlMessage(parsed);
+                            }
+                        } else {
+                            this.ui.addMsg(text, 'them');
+                        }
+                    } catch {
+                        // Plain text message
+                        this.ui.addMsg(text, 'them');
+                    }
+                } else {
+                    // Try to convert to string
+                    this.ui.addMsg(data.toString(), 'them');
+                }
+            } catch (e) {
+                console.error('Error handling peer data:', e);
+            }
+        });
+        
+        peer.on('error', (err) => {
+            console.error('Pool peer error:', err);
+            this.ui.addMsg('Connection error: ' + err.message, 'them');
+            this.ui.setStatus('Pool error');
+        });
+        
+        peer.on('close', () => {
+            console.log('Pool peer disconnected');
+            this.ui.setStatus('Disconnected');
+            this.ui.addMsg('Stranger disconnected.', 'them');
+            this.state.disableChatControls();
+            
+            // Clean up
+            this.state.poolPeer = null;
+            this.state.dc = null;
+        });
+        
+        // Add send method for compatibility
+        if (!peer.send && peer.write) {
+            peer.send = (data) => {
+                if (peer.connected) {
+                    peer.write(data);
+                }
+            };
         }
     }
     
     bindPoolPeer(peer) {
         this.state.poolPeer = peer;
         
-        if (peer.on) {
+        // Enable chat controls when connected
+        peer.on('connect', () => {
+            console.log('Peer connected!');
+            this.ui.setStatus('Connected (pool)');
+            this.ui.addMsg('Connected to stranger (pool).', 'them');
+            this.state.dc = peer;
+            this.state.enableChatControls();
+        });
+        
+        peer.on('data', (data) => {
             try {
-                peer.on('signal', data => {
-                    try {
-                        if (this.state.poolClient && this.state.poolClient.signal) {
-                            this.state.poolClient.signal(data);
-                        }
-                    } catch (_) {}
-                });
-            } catch (_) {}
-            
-            try {
-                peer.on('connect', () => {
-                    this.ui.setStatus('Connected (pool)');
-                    this.ui.addMsg('Connected to stranger (pool).', 'them');
-                    this.state.dc = peer;
-                    this.state.enableChatControls();
-                });
-            } catch (_) {}
-            
-            try {
-                peer.on('data', (d) => {
-                    this.ui.addMsg((d && d.toString) ? d.toString() : String(d), 'them');
-                });
-            } catch (_) {}
-        } else {
-            if (peer.onmessage) {
-                peer.onmessage = (e) => this.ui.addMsg(e.data, 'them');
-                this.ui.setStatus('Connected (pool)');
-                this.state.dc = peer;
-            } else {
-                this.ui.addMsg('Connected to peer (pool) — but peer API shape is unfamiliar; check pool build compatibility.', 'them');
+                // Check if it's a string message
+                if (typeof data === 'string' || data instanceof String) {
+                    this.ui.addMsg(data, 'them');
+                } else {
+                    // Convert buffer to string
+                    this.ui.addMsg(data.toString(), 'them');
+                }
+            } catch (e) {
+                console.error('Error handling peer data:', e);
             }
-        }
+        });
+        
+        peer.on('error', (err) => {
+            console.error('Peer error:', err);
+            this.ui.addMsg('Connection error: ' + err.message, 'them');
+        });
+        
+        peer.on('close', () => {
+            console.log('Peer disconnected');
+            this.ui.setStatus('Disconnected');
+            this.state.disableChatControls();
+        });
+        
+        // SimplePeer 'send' method
+        peer.send = peer.send || ((data) => {
+            if (peer.connected) {
+                peer.write(data);
+            }
+        });
     }
 }
 
