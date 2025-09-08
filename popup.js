@@ -484,15 +484,22 @@ class PoolManager {
         }
     }
 
+    // In PoolManager class, remove the duplicate bindPoolPeer and keep only this one:
     bindPoolPeer(peer) {
         this.state.poolPeer = peer;
+        
+        // Store reference to signalManager for control messages
+        const signalManager = window.signalManager || this;
         
         // SimplePeer events
         peer.on('connect', () => {
             console.log('Pool peer connected!');
             this.ui.setStatus('Connected (pool)');
             this.ui.addMsg('Connected to stranger! You can now chat.', 'them');
+            
+            // IMPORTANT: Set the data channel reference
             this.state.dc = peer;
+            this.state.connected = true;
             this.state.enableChatControls();
             
             // Clear the signal data
@@ -506,34 +513,75 @@ class PoolManager {
         
         peer.on('data', (data) => {
             try {
-                // Handle incoming messages
-                if (typeof data === 'string' || data instanceof String) {
-                    this.ui.addMsg(data, 'them');
+                let messageText;
+                
+                // Handle different data types
+                if (typeof data === 'string') {
+                    messageText = data;
                 } else if (data instanceof ArrayBuffer || data instanceof Uint8Array) {
-                    // Convert buffer to string for text messages
-                    const text = new TextDecoder().decode(data);
-                    try {
-                        // Check if it's JSON (control message)
-                        const parsed = JSON.parse(text);
-                        if (parsed.type === 'control') {
-                            // Let signalManager handle it
-                            if (window.signalManager) {
-                                window.signalManager.handleControlMessage(parsed);
-                            }
-                        } else {
-                            this.ui.addMsg(text, 'them');
-                        }
-                    } catch {
-                        // Plain text message
-                        this.ui.addMsg(text, 'them');
-                    }
+                    // Convert buffer to string
+                    messageText = new TextDecoder().decode(data);
                 } else {
-                    // Try to convert to string
-                    this.ui.addMsg(data.toString(), 'them');
+                    messageText = data.toString();
                 }
+                
+                // Try to parse as JSON for control messages
+                try {
+                    const parsed = JSON.parse(messageText);
+                    
+                    if (parsed.type === 'control') {
+                        // Call handleControlMessage on the main signalManager
+                        if (window.signalManager && window.signalManager.handleControlMessage) {
+                            window.signalManager.handleControlMessage(parsed);
+                        }
+                        return;
+                    }
+                    
+                    if (parsed.type === 'file-metadata') {
+                        this.state.fileState.receiving = true;
+                        this.state.fileState.metadata = parsed;
+                        this.state.fileState.chunks = [];
+                        this.state.fileState.receivedSize = 0;
+                        this.ui.showFileProgress(parsed.name, false);
+                        return;
+                    }
+                    
+                    if (parsed.type === 'file-complete') {
+                        if (this.state.fileState.receiving) {
+                            const blob = new Blob(this.state.fileState.chunks, { 
+                                type: this.state.fileState.metadata.mimeType 
+                            });
+                            const url = URL.createObjectURL(blob);
+                            this.ui.addFileLink(this.state.fileState.metadata.name, url);
+                            this.ui.hideFileProgress();
+                            this.state.fileState.receiving = false;
+                        }
+                        return;
+                    }
+                } catch {
+                    // Not JSON, treat as regular message
+                }
+                
+                // Regular text message
+                this.ui.addMsg(messageText, 'them');
+                
             } catch (e) {
                 console.error('Error handling peer data:', e);
+                // If it's binary data for file transfer
+                if (data instanceof ArrayBuffer && this.state.fileState.receiving) {
+                    this.state.fileState.chunks.push(data);
+                    this.state.fileState.receivedSize += data.byteLength;
+                    
+                    const progress = Math.round((this.state.fileState.receivedSize / this.state.fileState.metadata.size) * 100);
+                    this.ui.updateFileProgress(progress);
+                }
             }
+        });
+        
+        peer.on('stream', (stream) => {
+            console.log('Received stream from peer');
+            this.state.remoteStream = stream;
+            el('#remoteVideo').srcObject = stream;
         });
         
         peer.on('error', (err) => {
@@ -547,65 +595,11 @@ class PoolManager {
             this.ui.setStatus('Disconnected');
             this.ui.addMsg('Stranger disconnected.', 'them');
             this.state.disableChatControls();
-            
-            // Clean up
-            this.state.poolPeer = null;
-            this.state.dc = null;
+            this.state.cleanup();
         });
         
-        // Add send method for compatibility
-        if (!peer.send && peer.write) {
-            peer.send = (data) => {
-                if (peer.connected) {
-                    peer.write(data);
-                }
-            };
-        }
-    }
-    
-    bindPoolPeer(peer) {
-        this.state.poolPeer = peer;
-        
-        // Enable chat controls when connected
-        peer.on('connect', () => {
-            console.log('Peer connected!');
-            this.ui.setStatus('Connected (pool)');
-            this.ui.addMsg('Connected to stranger (pool).', 'them');
-            this.state.dc = peer;
-            this.state.enableChatControls();
-        });
-        
-        peer.on('data', (data) => {
-            try {
-                // Check if it's a string message
-                if (typeof data === 'string' || data instanceof String) {
-                    this.ui.addMsg(data, 'them');
-                } else {
-                    // Convert buffer to string
-                    this.ui.addMsg(data.toString(), 'them');
-                }
-            } catch (e) {
-                console.error('Error handling peer data:', e);
-            }
-        });
-        
-        peer.on('error', (err) => {
-            console.error('Peer error:', err);
-            this.ui.addMsg('Connection error: ' + err.message, 'them');
-        });
-        
-        peer.on('close', () => {
-            console.log('Peer disconnected');
-            this.ui.setStatus('Disconnected');
-            this.state.disableChatControls();
-        });
-        
-        // SimplePeer 'send' method
-        peer.send = peer.send || ((data) => {
-            if (peer.connected) {
-                peer.write(data);
-            }
-        });
+        // Store reference for WebRTC manager
+        this.state.pc = peer;
     }
 }
 
@@ -617,6 +611,8 @@ class SignalingManager {
         this.webrtc = new WebRTCManager(this.state, this.ui);
         this.fileTransfer = new FileTransferManager(this.state, this.ui);
         this.pool = new PoolManager(this.state, this.ui);  // Changed from this.tracker
+        
+        window.signalManager = this;
         this.bindGlobalEvents();
         this.loadSettings();
         this.state.disableChatControls();
@@ -712,7 +708,7 @@ class SignalingManager {
     }
 
     async startVoiceCall() {
-        if (!this.state.pc) {
+        if (!this.state.poolPeer && !this.state.pc) {
             this.ui.addMsg('Not connected. Cannot start call.', 'them');
             return;
         }
@@ -720,21 +716,25 @@ class SignalingManager {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
             
-            // Replace or add audio track
-            const audioTrack = stream.getAudioTracks()[0];
-            const sender = this.state.pc.getSenders().find(s => s.track && s.track.kind === 'audio');
-            
-            if (sender) {
-                sender.replaceTrack(audioTrack);
-            } else {
-                this.state.pc.addTrack(audioTrack, stream);
+            if (this.state.poolPeer) {
+                // For pool connections using SimplePeer
+                this.state.poolPeer.addStream(stream);
+            } else if (this.state.pc && this.state.pc.addTrack) {
+                // For manual connections
+                const audioTrack = stream.getAudioTracks()[0];
+                const sender = this.state.pc.getSenders().find(s => s.track && s.track.kind === 'audio');
+                
+                if (sender) {
+                    sender.replaceTrack(audioTrack);
+                } else {
+                    this.state.pc.addTrack(audioTrack, stream);
+                }
             }
             
             this.state.localStream = stream;
             el('#voiceCallBtn').style.display = 'none';
             el('#endCallBtn').style.display = 'inline-block';
             this.ui.addMsg('Voice call started', 'me');
-            // Notify peer
             this.sendControlMessage('voice-call-start');
         } catch (err) {
             console.error('Error starting voice call:', err);
@@ -743,7 +743,7 @@ class SignalingManager {
     }
 
     async startVideoCall() {
-        if (!this.state.pc) {
+        if (!this.state.poolPeer && !this.state.pc) {
             this.ui.addMsg('Not connected. Cannot start call.', 'them');
             return;
         }
@@ -754,22 +754,26 @@ class SignalingManager {
             // Update local video
             el('#localVideo').srcObject = stream;
             
-            // Add or replace tracks
-            stream.getTracks().forEach(track => {
-                const sender = this.state.pc.getSenders().find(s => s.track && s.track.kind === track.kind);
-                
-                if (sender) {
-                    sender.replaceTrack(track);
-                } else {
-                    this.state.pc.addTrack(track, stream);
-                }
-            });
+            if (this.state.poolPeer) {
+                // For pool connections using SimplePeer
+                this.state.poolPeer.addStream(stream);
+            } else if (this.state.pc && this.state.pc.addTrack) {
+                // For manual connections
+                stream.getTracks().forEach(track => {
+                    const sender = this.state.pc.getSenders().find(s => s.track && s.track.kind === track.kind);
+                    
+                    if (sender) {
+                        sender.replaceTrack(track);
+                    } else {
+                        this.state.pc.addTrack(track, stream);
+                    }
+                });
+            }
             
             this.state.localStream = stream;
             el('#videoCallBtn').style.display = 'none';
             el('#endCallBtn').style.display = 'inline-block';
             this.ui.addMsg('Video call started', 'me');
-            // Notify peer
             this.sendControlMessage('video-call-start');
             
         } catch (err) {
@@ -782,15 +786,26 @@ class SignalingManager {
         if (this.state.localStream) {
             this.state.localStream.getTracks().forEach(track => {
                 track.stop();
-                const sender = this.state.pc.getSenders().find(s => s.track === track);
-                if (sender && this.state.pc.connectionState === 'connected') {
-                    try {
-                        sender.replaceTrack(null);
-                    } catch (e) {
-                        console.error('Error replacing track:', e);
-                    }
-                }
             });
+            
+            // For manual connections, remove tracks
+            if (this.state.pc && this.state.pc.getSenders) {
+                this.state.localStream.getTracks().forEach(track => {
+                    const sender = this.state.pc.getSenders().find(s => s.track === track);
+                    if (sender && this.state.pc.connectionState === 'connected') {
+                        try {
+                            sender.replaceTrack(null);
+                        } catch (e) {
+                            console.error('Error replacing track:', e);
+                        }
+                    }
+                });
+            }
+            
+            // For pool connections, removeStream
+            if (this.state.poolPeer && this.state.poolPeer.removeStream) {
+                this.state.poolPeer.removeStream(this.state.localStream);
+            }
             
             this.state.localStream = null;
             el('#localVideo').srcObject = null;
@@ -800,7 +815,6 @@ class SignalingManager {
         el('#videoCallBtn').style.display = 'inline-block';
         el('#endCallBtn').style.display = 'none';
         this.ui.addMsg('Call ended', 'me');
-        // Notify peer
         this.sendControlMessage('call-end');
     }
 
@@ -842,7 +856,8 @@ class SignalingManager {
 
     // --- Screen Sharing ---
     async toggleScreenShare() {
-        if (!this.state.pc) {
+        // Check for both pool and manual connections
+        if (!this.state.poolPeer && !this.state.pc) {
             this.ui.addMsg('Not connected. Start a connection first.', 'them');
             return;
         }
@@ -852,8 +867,14 @@ class SignalingManager {
                 // Stop screen sharing
                 this.state.screenStream.getTracks().forEach(track => track.stop());
                 
-                // Replace with camera stream if available
-                if (this.state.localStream) {
+                // For pool connections
+                if (this.state.poolPeer && this.state.localStream) {
+                    this.state.poolPeer.removeStream(this.state.screenStream);
+                    this.state.poolPeer.addStream(this.state.localStream);
+                    el('#localVideo').srcObject = this.state.localStream;
+                }
+                // For manual connections
+                else if (this.state.pc && this.state.localStream) {
                     const videoTrack = this.state.localStream.getVideoTracks()[0];
                     if (videoTrack) {
                         const sender = this.state.pc.getSenders().find(s => s.track && s.track.kind === 'video');
@@ -864,7 +885,6 @@ class SignalingManager {
                 this.state.screenStream = null;
                 el('#screenBtn').textContent = '🖥️';
                 this.ui.addMsg('Screen sharing stopped', 'me');
-                // Notify peer
                 this.sendControlMessage('screen-share-toggle', { sharing: false });
                 
             } else {
@@ -876,27 +896,35 @@ class SignalingManager {
                 
                 this.state.screenStream = stream;
                 
-                // Replace video track with screen share
-                const videoTrack = stream.getVideoTracks()[0];
-                const sender = this.state.pc.getSenders().find(s => s.track && s.track.kind === 'video');
-                
-                if (sender) {
-                    sender.replaceTrack(videoTrack);
-                } else {
-                    this.state.pc.addTrack(videoTrack, stream);
+                // For pool connections
+                if (this.state.poolPeer) {
+                    if (this.state.localStream) {
+                        this.state.poolPeer.removeStream(this.state.localStream);
+                    }
+                    this.state.poolPeer.addStream(stream);
+                }
+                // For manual connections
+                else if (this.state.pc) {
+                    const videoTrack = stream.getVideoTracks()[0];
+                    const sender = this.state.pc.getSenders().find(s => s.track && s.track.kind === 'video');
+                    
+                    if (sender) {
+                        sender.replaceTrack(videoTrack);
+                    } else {
+                        this.state.pc.addTrack(videoTrack, stream);
+                    }
                 }
                 
                 // Update local video
                 el('#localVideo').srcObject = stream;
                 
                 // Listen for screen share end
-                videoTrack.onended = () => {
+                stream.getVideoTracks()[0].onended = () => {
                     this.toggleScreenShare();
                 };
                 
                 el('#screenBtn').textContent = '⏹️';
                 this.ui.addMsg('Started screen sharing', 'me');
-                // Notify peer
                 this.sendControlMessage('screen-share-toggle', { sharing: true });
             }
         } catch (err) {
