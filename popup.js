@@ -13,8 +13,8 @@ class ChatState {
         this.remoteStream = null;
         this.screenStream = null;
         this.connected = false;
-        this.trackerClient = null;
-        this.trackerPeer = null;
+        this.poolClient = null;
+        this.poolPeer = null;
         
         // File transfer state
         this.fileState = {
@@ -29,8 +29,8 @@ class ChatState {
     cleanup() {
         try { if (this.dc) this.dc.close && this.dc.close(); } catch (_) { }
         try { if (this.pc) this.pc.close(); } catch (_) { }
-        try { if (this.trackerPeer) this.trackerPeer.destroy && this.trackerPeer.destroy(); } catch (_) { }
-        try { if (this.trackerClient) this.trackerClient.destroy && this.trackerClient.destroy(); } catch (_) { }
+        try { if (this.poolPeer) this.poolPeer.destroy && this.poolPeer.destroy(); } catch (_) { }
+        try { if (this.poolClient) this.poolClient.destroy && this.poolClient.destroy(); } catch (_) { }
         if (this.localStream) { this.localStream.getTracks().forEach(t => t.stop()); }
         if (this.screenStream) { this.screenStream.getTracks().forEach(t => t.stop()); }
 
@@ -40,8 +40,8 @@ class ChatState {
         this.remoteStream = null;
         this.screenStream = null;
         this.connected = false;
-        this.trackerClient = null;
-        this.trackerPeer = null;
+        this.poolClient = null;
+        this.poolPeer = null;
         el('#remoteVideo').srcObject = null;
         el('#localVideo').srcObject = null;
         
@@ -348,8 +348,7 @@ class FileTransferManager {
                     this.ui.hideFileProgress();
                 }
             };
-            
-            reader.onerror = () => {
+                        reader.onerror = () => {
                 this.ui.addMsg('Error reading file', 'them');
                 this.ui.hideFileProgress();
             };
@@ -362,14 +361,14 @@ class FileTransferManager {
     }
 }
 
-// --- Class 5: TrackerManager ---
-class TrackerManager {
+// --- Class 5: PoolManager --- (Changed from TrackerManager)
+class PoolManager {
     constructor(state, ui) {
         this.state = state;
         this.ui = ui;
     }
     
-    getDefaultTrackers() {
+    getDefaultPools() {
         return [
             'wss://tracker.openwebtorrent.com',
             'wss://tracker.btorrent.xyz',
@@ -378,47 +377,47 @@ class TrackerManager {
         ];
     }
     
-    getTrackersList() {
-        const saved = localStorage.getItem('trackers');
+    getPoolsList() {
+        const saved = localStorage.getItem('pools');
         if (saved && saved.trim()) return saved.trim().split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-        return this.getDefaultTrackers();
+        return this.getDefaultPools();
     }
     
-    saveTrackers() {
-        const list = (el('#trackerList') && el('#trackerList').value) ? el('#trackerList').value.trim() : '';
-        localStorage.setItem('trackers', list);
-        this.ui.addMsg('Tracker list saved.', 'them');
-        this.ui.setStatus('Tracker list saved');
+    savePools() {
+        const list = (el('#poolList') && el('#poolList').value) ? el('#poolList').value.trim() : '';
+        localStorage.setItem('pools', list);
+        this.ui.addMsg('Pool list saved.', 'them');
+        this.ui.setStatus('Pool list saved');
     }
     
-    restoreDefaultTrackers() {
-        el('#trackerList').value = this.getDefaultTrackers().join('\n');
-        this.saveTrackers();
+    restoreDefaultPools() {
+        el('#poolList').value = this.getDefaultPools().join('\n');
+        this.savePools();
     }
     
-    startTrackerMode() {
+    startPoolMode() {
         // Detection of browser globals
         const TrackerClient = window.Client || window.bittorrentTrackerClient || window.BittorrentTrackerClient || window.bittorrentTracker || null;
         const SimplePeerGlobal = window.SimplePeer || window.SimplePeerDefault || window.SimplePeerLib || null;
         
         if (!TrackerClient || !SimplePeerGlobal) {
-            this.ui.addMsg('Tracker libraries not found. To enable Tracker mode, add browser builds of simple-peer and bittorrent-tracker to lib/.', 'them');
-            this.ui.setStatus('Tracker unavailable');
+            this.ui.addMsg('Pool libraries not found. To enable Pool mode, add browser builds of simple-peer and bittorrent-tracker to lib/.', 'them');
+            this.ui.setStatus('Pool unavailable');
             return;
         }
         
         // Safe destroy any existing client/pc
-        if (this.state.trackerClient && this.state.trackerClient.destroy) {
-            try { this.state.trackerClient.destroy(); } catch (_) {}
-            this.state.trackerClient = null;
+        if (this.state.poolClient && this.state.poolClient.destroy) {
+            try { this.state.poolClient.destroy(); } catch (_) {}
+            this.state.poolClient = null;
         }
-        if (this.state.trackerPeer && this.state.trackerPeer.destroy) {
-            try { this.state.trackerPeer.destroy(); } catch (_) {}
-            this.state.trackerPeer = null;
+        if (this.state.poolPeer && this.state.poolPeer.destroy) {
+            try { this.state.poolPeer.destroy(); } catch (_) {}
+            this.state.poolPeer = null;
         }
         
         // Prepare announce list
-        const announce = this.getTrackersList();
+        const announce = this.getPoolsList();
         const peerId = 'p-' + Math.random().toString(36).substr(2, 9);
         const infoHash = 'strangerchatroom00000001';
         
@@ -429,45 +428,45 @@ class TrackerManager {
                 announce
             });
             
-            this.state.trackerClient = client;
-            this.ui.setStatus('Searching for peers (tracker)...');
-            this.ui.addMsg('Searching for a stranger (tracker mode)...', 'them');
+            this.state.poolClient = client;
+            this.ui.setStatus('Searching for peers (pool)...');
+            this.ui.addMsg('Searching for a stranger (pool mode)...', 'them');
             
             client.on('error', (err) => {
-                console.warn('tracker error', err);
-                this.ui.addMsg('Tracker error: ' + (err && err.message ? err.message : err), 'them');
-                this.ui.setStatus('Tracker error');
+                console.warn('pool error', err);
+                this.ui.addMsg('Pool error: ' + (err && err.message ? err.message : err), 'them');
+                this.ui.setStatus('Pool error');
             });
             
             client.on('warning', (err) => {
-                console.warn('tracker warning', err);
+                console.warn('pool warning', err);
             });
             
             client.on('peer', (peer) => {
-                console.log('Tracker found peer', peer);
-                if (this.state.trackerPeer) {
+                console.log('Pool found peer', peer);
+                if (this.state.poolPeer) {
                     return;
                 }
-                this.bindTrackerPeer(peer);
+                this.bindPoolPeer(peer);
             });
             
             client.start();
         } catch (e) {
-            console.error('failed to start tracker client', e);
-            this.ui.addMsg('Failed to start tracker client: ' + e.message, 'them');
-            this.ui.setStatus('Tracker init failed');
+            console.error('failed to start pool client', e);
+            this.ui.addMsg('Failed to start pool client: ' + e.message, 'them');
+            this.ui.setStatus('Pool init failed');
         }
     }
     
-    bindTrackerPeer(peer) {
-        this.state.trackerPeer = peer;
+    bindPoolPeer(peer) {
+        this.state.poolPeer = peer;
         
         if (peer.on) {
             try {
                 peer.on('signal', data => {
                     try {
-                        if (this.state.trackerClient && this.state.trackerClient.signal) {
-                            this.state.trackerClient.signal(data);
+                        if (this.state.poolClient && this.state.poolClient.signal) {
+                            this.state.poolClient.signal(data);
                         }
                     } catch (_) {}
                 });
@@ -475,9 +474,10 @@ class TrackerManager {
             
             try {
                 peer.on('connect', () => {
-                    this.ui.setStatus('Connected (tracker)');
-                    this.ui.addMsg('Connected to stranger (tracker).', 'them');
+                    this.ui.setStatus('Connected (pool)');
+                    this.ui.addMsg('Connected to stranger (pool).', 'them');
                     this.state.dc = peer;
+                    this.state.enableChatControls();
                 });
             } catch (_) {}
             
@@ -489,10 +489,10 @@ class TrackerManager {
         } else {
             if (peer.onmessage) {
                 peer.onmessage = (e) => this.ui.addMsg(e.data, 'them');
-                this.ui.setStatus('Connected (tracker)');
+                this.ui.setStatus('Connected (pool)');
                 this.state.dc = peer;
             } else {
-                this.ui.addMsg('Connected to peer (tracker) — but peer API shape is unfamiliar; check tracker build compatibility.', 'them');
+                this.ui.addMsg('Connected to peer (pool) — but peer API shape is unfamiliar; check pool build compatibility.', 'them');
             }
         }
     }
@@ -505,7 +505,7 @@ class SignalingManager {
         this.ui = new UIHandler(this.state);
         this.webrtc = new WebRTCManager(this.state, this.ui);
         this.fileTransfer = new FileTransferManager(this.state, this.ui);
-        this.tracker = new TrackerManager(this.state, this.ui);
+        this.pool = new PoolManager(this.state, this.ui);  // Changed from this.tracker
         this.bindGlobalEvents();
         this.loadSettings();
         this.state.disableChatControls();
@@ -589,7 +589,7 @@ class SignalingManager {
         }
     }
 
-// Helper method to send control messages
+    // Helper method to send control messages
     sendControlMessage(action, data = {}) {
         if (this.state.dc && this.state.dc.readyState === 'open') {
             this.state.dc.send(JSON.stringify({
@@ -692,6 +692,7 @@ class SignalingManager {
         // Notify peer
         this.sendControlMessage('call-end');
     }
+
     async generateAnswer() {
         const val = el('#remoteSDP').value.trim();
         if (!val) { 
@@ -806,12 +807,12 @@ class SignalingManager {
                 i.value = '';
                 return;
             }
-        } catch (e) { /* continue to try tracker peer */ }
+        } catch (e) { /* continue to try pool peer */ }
         
-        // tracker peer 'send' method (some libs expose send)
+        // pool peer 'send' method (some libs expose send)
         try {
-            if (this.state.trackerPeer && this.state.trackerPeer.send) {
-                this.state.trackerPeer.send(text);
+            if (this.state.poolPeer && this.state.poolPeer.send) {
+                this.state.poolPeer.send(text);
                 this.ui.addMsg(text, 'me');
                 i.value = '';
                 return;
@@ -866,9 +867,9 @@ class SignalingManager {
 
     next() {
         this.leave();
-        // if tracker mode is selected, start tracker; otherwise start manual (new offer)
+        // if pool mode is selected, start pool; otherwise start manual (new offer)
         const mode = (el('input[name="sigMode"]:checked') || {}).value || 'manual';
-        if (mode === 'tracker') this.tracker.startTrackerMode();
+        if (mode === 'pool') this.pool.startPoolMode();
         else this.start();
     }
 
@@ -892,9 +893,9 @@ class SignalingManager {
     }
 
     loadSettings() {
-        // Preload trackers into settings UI
-        const trackers = localStorage.getItem('trackers') || this.tracker.getDefaultTrackers().join('\n');
-        if (el('#trackerList')) el('#trackerList').value = trackers.trim();
+        // Preload pools into settings UI
+        const pools = localStorage.getItem('pools') || this.pool.getDefaultPools().join('\n');
+        if (el('#poolList')) el('#poolList').value = pools.trim();
     }
 
     // --- UI Bindings ---
@@ -903,7 +904,7 @@ class SignalingManager {
         el('#startBtn').addEventListener('click', () => {
             const mode = (el('input[name="sigMode"]:checked') || {}).value || 'manual';
             if (mode === 'manual') this.start();
-            else this.tracker.startTrackerMode();
+            else this.pool.startPoolMode();
         });
         
         el('#applyAnswerBtn').addEventListener('click', () => this.applyAnswer());
@@ -930,13 +931,12 @@ class SignalingManager {
         el('#screenBtn').addEventListener('click', () => this.toggleScreenShare());
         
         // Settings
-        el('#saveTrackersBtn').addEventListener('click', () => this.tracker.saveTrackers());
-        el('#restoreDefaultTrackersBtn').addEventListener('click', () => this.tracker.restoreDefaultTrackers());
+        el('#savePoolsBtn').addEventListener('click', () => this.pool.savePools());
+        el('#restoreDefaultPoolsBtn').addEventListener('click', () => this.pool.restoreDefaultPools());
         
         // Utility
         el('#downloadBtn').addEventListener('click', () => this.saveLog());
-        // In bindGlobalEvents method, add these new event listeners:
-
+        
         // Call buttons
         el('#voiceCallBtn').addEventListener('click', () => this.startVoiceCall());
         el('#videoCallBtn').addEventListener('click', () => this.startVideoCall());

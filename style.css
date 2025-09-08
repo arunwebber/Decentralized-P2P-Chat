@@ -682,3 +682,17 @@ body.dark-mode #chatControls button:disabled:hover {
   color: var(--text-dark);
   border-color: var(--border-dark);
 }
+/* Update the textarea ID */
+#poolList {
+  width: 100%;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  padding: 8px;
+  resize: vertical;
+}
+
+body.dark-mode #poolList {
+  background: var(--bg-dark);
+  border-color: var(--border-dark);
+  color: var(--text-dark);
+}

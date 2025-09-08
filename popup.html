@@ -27,10 +27,10 @@
           <div id="statusBar">
             <span id="status">Idle</span>
 
-            <!-- simplified signaling selector (manual or tracker) -->
+            <!-- simplified signaling selector (manual or pool) -->
             <div id="signalMode">
               <label><input type="radio" name="sigMode" value="manual" checked /> Manual</label>
-              <label><input type="radio" name="sigMode" value="tracker" /> Tracker</label>
+              <label><input type="radio" name="sigMode" value="pool" /> Pool</label>
             </div>
           </div>
 
@@ -80,7 +80,7 @@
       <div class="rightPanel-content">
       <div class="rightTabContent" id="pairing" style="display:block;">
         <div class="pair-row">
-          <button id="startBtn">Start (Create Offer / Start Tracker)</button>
+          <button id="startBtn">Start (Create Offer / Join Pool)</button>
           <button id="haveOfferBtn">I Have Their Offer</button>
           <button id="nextBtn">Next</button>
           <button id="leaveBtn">Leave</button>
@@ -131,23 +131,23 @@
             <input id="stunInput" value="stun:stun.stunprotocol.org:3478" />
           </div>
 
-          <!-- TRACKER settings -->
+          <!-- POOL settings -->
           <div style="margin-top:12px;">
-            <label for="trackerList"><strong>Tracker Servers (one per line)</strong></label>
-            <textarea id="trackerList" placeholder="wss://tracker.openwebtorrent.com
+            <label for="poolList"><strong>Pool Servers (one per line)</strong></label>
+            <textarea id="poolList" placeholder="wss://tracker.openwebtorrent.com
 wss://tracker.btorrent.xyz" rows="5"></textarea>
             <div class="row" style="margin-top:8px;">
-              <button id="saveTrackersBtn">Save Trackers</button>
-              <button id="restoreDefaultTrackersBtn">Restore Defaults</button>
+              <button id="savePoolsBtn">Save Pools</button>
+              <button id="restoreDefaultPoolsBtn">Restore Defaults</button>
             </div>
-            <p style="font-size:12px;color:#666;margin-top:6px;">Tracker mode requires adding `lib/simplepeer.min.js` and `lib/bittorrent-tracker.min.js` to enable auto-matching.</p>
+            <p style="font-size:12px;color:#666;margin-top:6px;">Pool mode requires adding `lib/simplepeer.min.js` and `lib/bittorrent-tracker.min.js` to enable auto-matching.</p>
           </div>
         </div>
 
         <div class="rightTabContent" id="about">
-          <p>WebRTC P2P chat with manual or tracker signaling. No central message storage. Use 'Next' to leave & start a new session.</p>
+          <p>WebRTC P2P chat with manual or pool signaling. No central message storage. Use 'Next' to leave & start a new session.</p>
           <p>Features: Text chat, audio/video calls, screen sharing, and file transfer.</p>
-          <p>To enable tracker auto-match, drop the browser builds of simple-peer and bittorrent-tracker into <code>lib/</code> (see README).</p>
+          <p>To enable pool auto-match, drop the browser builds of simple-peer and bittorrent-tracker into <code>lib/</code> (see README).</p>
         </div>
       </div>
     </div>
